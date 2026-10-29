@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fhir-gateway-cron
+  namespace: arogyam
+spec:
+  template:
+    spec:
+      containers:
+        - name: fhir-gateway
+          # The cron pod is the one workload measuring *above* its request:
+          # 175m CPU and 279Mi RSS against a 100m / 256Mi reservation. Being
+          # over its memory request makes it a first-choice eviction candidate
+          # under node pressure, which is the opposite of what a pod holding
+          # the cron locks should be.
+          #
+          # Production only: base still carries the web pod's shape, and the
+          # cron does materially more work here than on staging.
+          resources:
+            requests:
+              cpu: 200m
+              memory: 768Mi
+            limits:
+              cpu: "1"
+              memory: 1536Mi
+          # Node sizes its heap to ~half the container limit by default (~384MB
+          # at 768Mi). The upload-status pass outgrew that on 2026-10-21 (heap
+          # OOM and restart every ~30 min). Explicit heap, with headroom under
+          # the limit for buffers.
+          env:
+            - name: NODE_OPTIONS
+              value: --max-old-space-size=1024

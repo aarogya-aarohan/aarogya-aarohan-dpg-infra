@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fhir-gateway
+  namespace: arogyam
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 100m
+    # Report-download endpoints can take up to ~10 min to generate. Raise the
+    # nginx read/send timeouts well above the 60s default. NB: the platform-owned
+    # GCP LB backend service ((your load balancer backend service)) still caps at 30s by
+    # default — its Timeout must be raised in tandem or this has no effect.
+    # See docs/deployment-guide.md.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: __HOSTNAME__
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: fhir-gateway
+                port:
+                  number: 80

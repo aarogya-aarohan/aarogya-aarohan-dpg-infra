@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arogyam-dashboard
+  namespace: arogyam
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: arogyam-dashboard
+          resources:
+            # 3m CPU / 48Mi observed on staging. Base keeps requests at
+            # 100m/256Mi with a comment about not *raising* them on this
+            # single request-bound node; lowering serves the same intent.
+            # Limits inherited from base, including the raised CPU ceiling
+            # the report export path needs.
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          env:
+            - name: APP_ENV
+              value: staging
+            # Read at runtime by the server (see dashboard lib/featureFlags.ts).
+            # Deliberately not NEXT_PUBLIC_: that form is inlined into the bundle
+            # at build time, so it never reached the image and could not differ
+            # between staging and production.
+            - name: ENABLE_INSIGHTS_DASHBOARD
+              value: "true"
+        - name: blackbox-exporter
+          image: prom/blackbox-exporter:v0.25.0
+          args:
+            - --config.file=/etc/blackbox/blackbox.yml
+          ports:
+            - name: blackbox
+              containerPort: 9115
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+          volumeMounts:
+            - name: blackbox-config
+              mountPath: /etc/blackbox
+      volumes:
+        - name: blackbox-config
+          configMap:
+            name: blackbox-config

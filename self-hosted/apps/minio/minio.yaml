@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: minio
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: arogyam-example-site
+            name: arogyam-example-site
+            project: arogyam-production
+  template:
+    metadata:
+      name: '{{name}}-minio'
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: '{{project}}'
+      sources:
+        - chart: minio
+          repoURL: https://charts.bitnami.com/bitnami
+          targetRevision: 14.6.11
+          helm:
+            releaseName: minio
+            valueFiles:
+              - '$values/self-hosted/values/minio/values.yaml'
+        - repoURL: 'git@github.com:YOUR_ORG/aarogya-aarohan-dpg-infra.git'
+          targetRevision: main
+          ref: values
+      destination:
+        name: '{{cluster}}'
+        namespace: minio
+      syncPolicy:
+        automated:
+          selfHeal: true
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - Validate=true

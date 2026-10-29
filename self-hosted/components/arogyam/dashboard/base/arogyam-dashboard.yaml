@@ -1,0 +1,37 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arogyam-dashboard
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: arogyam-dashboard
+  template:
+    metadata:
+      labels:
+        app: arogyam-dashboard
+    spec:
+      containers:
+        - name: dashboard
+          image: iisc/arogyam-dashboard:ccccdb4
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: arogyam-dashboard-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arogyam-dashboard
+spec:
+  selector:
+    app: arogyam-dashboard
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 3000

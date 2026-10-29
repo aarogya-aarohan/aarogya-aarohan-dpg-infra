@@ -1,0 +1,38 @@
+resources:
+  - ../../../base
+
+patches:
+  - path: patch-arogyam-fhir-db.yaml
+
+  - path: patch-fhir-ingress.yaml
+    target:
+      group: networking.k8s.io
+      version: v1
+      kind: Ingress
+      name: arogyam-fhir-ingress
+
+  - path: patch-fhir-integration-ingress.yaml
+    target:
+      group: networking.k8s.io
+      version: v1
+      kind: Ingress
+      name: arogyam-fhir-integration-ingress
+
+secretGenerator:
+  - name: arogyam-fhir-db-secret
+    envs:
+      - .env-db.secret
+    options:
+      disableNameSuffixHash: true
+  - name: arogyam-fhir-secret
+    envs:
+      - .env-fhir.secret
+  - name: arogyam-fhir-integration-secret
+    envs:
+      - .env-fhir-integration.secret
+
+images:
+  - name: iisc/fhir-server:v7.2.4
+    newTag: v7.4.5
+  - name: iisc/arogyam-fhir-gateway:v0.2.11
+    newTag: v0.2.32

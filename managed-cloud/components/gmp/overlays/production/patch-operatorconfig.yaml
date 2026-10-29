@@ -1,0 +1,15 @@
+# Mirrors overlays/staging/patch-operatorconfig.yaml — see that file's header
+# comment for the full rationale (ServerSideApply merge into the GMP addon's
+# own singleton, why it's a `resources:` entry and not a `patches:` target,
+# and why this externalLabels value is explicitly NOT load-bearing: the
+# dashboard/alerting filter on the `cluster` label GMP stamps on every series
+# for free, so this file has no bearing on the dashboards. Added purely
+# for parity with staging (readable alert text / Metrics Explorer queries).
+apiVersion: monitoring.googleapis.com/v1
+kind: OperatorConfig
+metadata:
+  name: config
+  namespace: gmp-public
+collection:
+  externalLabels:
+    env: production

@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: arogyam
+resources:
+  - ../../base
+  - podmonitoring.yaml
+images:
+  - name: iisc/fhir-server
+    newTag: v7.4.20
+  - name: gcr.io/cloud-sql-connectors/cloud-sql-proxy
+    newTag: "2.13.0"
+patches:
+  - path: patch-serviceaccount.yaml
+    target:
+      version: v1
+      kind: ServiceAccount
+      name: hapi-fhir
+  - path: patch-configmap.yaml
+    target:
+      version: v1
+      kind: ConfigMap
+      name: hapi-fhir-config
+  - path: patch-deployment.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: hapi-fhir
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: Ingress
+      name: hapi-fhir
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: staging.example.org

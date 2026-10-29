@@ -1,0 +1,32 @@
+# Scoped to ingress-nginx only. HAPI FHIR and Keycloak have their own
+# PodMonitoring CRs in their component directories:
+#   - components/hapi-fhir/overlays/staging/podmonitoring.yaml
+#   - components/keycloak/values-staging.yaml (via the chart's extraDeploy:)
+# Don't add them here too: a second CR would conflict (same name, same
+# namespace) or be redundant.
+#
+# Port name: this targets the container port named `metrics`, which the
+# upstream ingress-nginx chart (pinned at 4.8.3, see
+# apps/platform/ingress-nginx-staging.yaml) declares on the controller pod
+# whenever controller.metrics.enabled: true (set in
+# components/ingress-nginx/values-base.yaml). To check:
+#   kubectl --context aa-stg -n ingress-nginx get pod \
+#     -l app.kubernetes.io/component=controller \
+#     -o jsonpath='{.items[0].spec.containers[0].ports}'
+#   kubectl --context aa-stg -n ingress-nginx exec deploy/ingress-nginx-controller \
+#     -- curl -s localhost:10254/metrics | head
+# If the port isn't named `metrics`, change `port: metrics` below to the
+# numeric containerPort (10254) instead; PodMonitoring accepts either.
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: ingress-nginx
+  namespace: ingress-nginx
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingress-nginx
+      app.kubernetes.io/component: controller
+  endpoints:
+    - port: metrics
+      interval: 30s

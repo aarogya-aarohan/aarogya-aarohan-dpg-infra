@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: arogyam-fhir-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arogyam-fhir
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: arogyam-fhir
+  template:
+    metadata:
+      labels:
+        app: arogyam-fhir
+    spec:
+      containers:
+        - name: fhir-server
+          image: iisc/fhir-server:v7.4.5
+          volumeMounts:
+            - mountPath: /app/target
+              name: arogyam-fhir-storage
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              port: 8080
+              path: /actuator/health
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              port: 8080
+              path: /actuator/health
+            initialDelaySeconds: 60
+            periodSeconds: 80
+          envFrom:
+            - secretRef:
+                name: arogyam-fhir-secret
+          env:
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: arogyam-fhir-db-app
+                  key: jdbc-uri
+      volumes:
+        - name: arogyam-fhir-storage
+          persistentVolumeClaim:
+            claimName: arogyam-fhir-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arogyam-fhir
+spec:
+  selector:
+    app: arogyam-fhir
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080

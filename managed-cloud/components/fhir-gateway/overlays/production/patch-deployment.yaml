@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fhir-gateway
+  namespace: arogyam
+spec:
+  template:
+    spec:
+      containers:
+        - name: fhir-gateway
+          # Per-env env. Strategic-merge by name: each entry below replaces the
+          # placeholder of the same name in base/deployment.yaml. Keep all
+          # Joi-required fields present (empty value still satisfies presence
+          # for non-string-validated keys; tighten as backend team supplies
+          # real per-env values).
+          env:
+            - name: MULTI_TENANT_SECRETS_ID
+              value: aa-prod-arogyam-tenant-credentials
+            - name: SERVER_NAME
+              value: multi_tenant_production
+            - name: FHIR_BASE_URL
+              value: http://hapi-fhir.arogyam.svc.cluster.local/fhir
+            - name: EXPORT_SITE_ID
+              value: state-a
+            # Export delivery is gated off until state-a's real export destination
+            # (export.fhir_url) is confirmed. Today export.fhir_url points back
+            # at this same HAPI host, so enabling it would copy state-a encounters
+            # into the shared DEFAULT partition every minute. Creds + issuer
+            # are otherwise wired (export_client=api-client, realm=state-a). Flip to
+            # "true" once the external export target is set in multi-tenant-sites.json.
+            # NB: Joi coerces "false"->false; DataExportConfig.enabled short-circuits
+            # the cron (the @Cron disabled flag itself is a no-op on a truthy string).
+            - name: EXPORT_ENABLED
+              value: "false"
+            - name: DIAGNOSIS_NON_SUSPICIOUS_DAILY_CRON_EXPRESSION
+              value: "30 12 * * *"
+            - name: DIAGNOSIS_SPECIALIST_DAILY_CRON_EXPRESSION
+              value: "30 12 * * *"
+            # FHIR_TOKEN_URL / FHIR_CLIENT_ID / FHIR_CLIENT_SECRET are now
+            # Joi-optional in v0.2.38 (legacy fallback only). Drop once the scheduler fan-out
+            # ships and confirms every code path sets a
+            # tenant in CLS.
+            - name: FHIR_TOKEN_URL
+              value: __FHIR_TOKEN_URL_PROD__
+            - name: FHIR_CLIENT_ID
+              value: __FHIR_CLIENT_ID_PROD__
+            - name: FHIR_CLIENT_SECRET
+              value: __FHIR_CLIENT_SECRET_PROD__

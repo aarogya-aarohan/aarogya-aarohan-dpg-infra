@@ -1,0 +1,117 @@
+{
+  "displayName": "arogyam-dashboard (staging) - overview",
+  "dashboardFilters": [],
+  "description": "Blackbox-exporter health probe for arogyam-dashboard, across both aa-stg and aa-prod. The original, always-on health check for this service. The unified \"Arogyam Platform\" dashboard's own arogyam-dashboard probe tiles cover the same probe_success / probe_duration_seconds signals split per environment; this dashboard also plots the raw HTTP status code the probe received, which the unified one doesn't, so it's the one to check for the actual status code.",
+  "gridLayout": {
+    "columns": "1",
+    "widgets": [
+      {
+        "title": "",
+        "id": "",
+        "text": {
+          "content": "# arogyam-dashboard — external health probe\n\nThree blackbox-exporter checks against arogyam-dashboard, covering both **aa-stg** and **aa-prod** in the same chart (check each line's legend for which pod/environment it is). This is the original, standalone health check for this service — the unified **Arogyam Platform** dashboard's \"arogyam-dashboard internal health probe\" section covers the same `probe_success` / `probe_duration_seconds` signals (split per environment there); this dashboard also plots the raw `probe_http_status_code`, which the unified one doesn't, so it's the one to check for the actual status code the probe received.\n\n**Watch for:** probe success dropping from 1 to 0 (app unreachable), response time climbing, or a status code other than 200.",
+          "format": "MARKDOWN",
+          "style": {
+            "backgroundColor": "",
+            "horizontalAlignment": "H_LEFT",
+            "padding": "P_EXTRA_SMALL",
+            "pointerLocation": "POINTER_LOCATION_UNSPECIFIED",
+            "textColor": "",
+            "verticalAlignment": "V_TOP"
+          }
+        }
+      },
+      {
+        "title": "Probe success (1 = up, 0 = down)",
+        "id": "",
+        "xyChart": {
+          "dataSets": [
+            {
+              "breakdowns": [],
+              "dimensions": [],
+              "legendTemplate": "",
+              "measures": [],
+              "plotType": "LINE",
+              "sort": [],
+              "targetAxis": "Y1",
+              "timeSeriesQuery": {
+                "outputFullDuration": false,
+                "timeSeriesFilter": {
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "groupByFields": [],
+                    "perSeriesAligner": "ALIGN_MEAN"
+                  },
+                  "filter": "metric.type=\"prometheus.googleapis.com/probe_success/gauge\" resource.type=\"prometheus_target\" resource.label.\"namespace\"=\"arogyam\""
+                },
+                "unitOverride": ""
+              }
+            }
+          ],
+          "thresholds": []
+        }
+      },
+      {
+        "title": "Response time (seconds)",
+        "id": "",
+        "xyChart": {
+          "dataSets": [
+            {
+              "breakdowns": [],
+              "dimensions": [],
+              "legendTemplate": "",
+              "measures": [],
+              "plotType": "LINE",
+              "sort": [],
+              "targetAxis": "Y1",
+              "timeSeriesQuery": {
+                "outputFullDuration": false,
+                "timeSeriesFilter": {
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "groupByFields": [],
+                    "perSeriesAligner": "ALIGN_MEAN"
+                  },
+                  "filter": "metric.type=\"prometheus.googleapis.com/probe_duration_seconds/gauge\" resource.type=\"prometheus_target\" resource.label.\"namespace\"=\"arogyam\""
+                },
+                "unitOverride": ""
+              }
+            }
+          ],
+          "thresholds": []
+        }
+      },
+      {
+        "title": "HTTP status code (200 = healthy)",
+        "id": "",
+        "xyChart": {
+          "dataSets": [
+            {
+              "breakdowns": [],
+              "dimensions": [],
+              "legendTemplate": "",
+              "measures": [],
+              "plotType": "LINE",
+              "sort": [],
+              "targetAxis": "Y1",
+              "timeSeriesQuery": {
+                "outputFullDuration": false,
+                "timeSeriesFilter": {
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "groupByFields": [],
+                    "perSeriesAligner": "ALIGN_MEAN"
+                  },
+                  "filter": "metric.type=\"prometheus.googleapis.com/probe_http_status_code/gauge\" resource.type=\"prometheus_target\" resource.label.\"namespace\"=\"arogyam\""
+                },
+                "unitOverride": ""
+              }
+            }
+          ],
+          "thresholds": []
+        }
+      }
+    ]
+  },
+  "labels": {}
+}

@@ -1,0 +1,19 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: arogyam-fhir-db
+spec:
+  storage:
+    size: 10Gi
+  backup:
+    barmanObjectStore:
+      destinationPath: "s3://<your-backup-bucket>/arogyam/example-site/"
+      endpointURL: "https://<your-s3-endpoint>"
+      s3Credentials:
+        accessKeyId:
+          name: arogyam-fhir-db-secret
+          key: AWS_ACCESS_KEY_ID
+        secretAccessKey:
+          name: arogyam-fhir-db-secret
+          key: AWS_ACCESS_SECRET_KEY
+    retentionPolicy: "7d"

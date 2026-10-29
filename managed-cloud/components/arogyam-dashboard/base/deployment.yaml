@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arogyam-dashboard
+  namespace: arogyam
+  labels:
+    app.kubernetes.io/name: arogyam-dashboard
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: arogyam-dashboard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: arogyam-dashboard
+    spec:
+      containers:
+        - name: arogyam-dashboard
+          image: iisc/arogyam-dashboard:2db5bc7
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: arogyam-dashboard-env
+          env:
+            - name: KEYCLOAK_TENANTS_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: arogyam-dashboard-keycloak-tenants
+                  key: KEYCLOAK_TENANTS_JSON
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 4
+          resources:
+            # Requests deliberately unchanged. Staging is a single
+            # request-bound node, and raising these would make the rollout's
+            # surge pod unschedulable — the stall HAPI hit for the same reason.
+            # Limits are what throttle, so the fix needs nothing here.
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              # Raised from 500m/512Mi for the report export path.
+              #
+              # /api/download-report pages the whole tenant into memory and
+              # then builds the CSV with csv-stringify's SYNCHRONOUS stringify
+              # — 3221 rows x ~50 columns for one large tenant — which blocks the Node event
+              # loop on a single core. Measured: paging finished in 366s, then
+              # the request never returned before the load balancer's 600s cut,
+              # with no error and no OOM. Throttled to half a core, a step that
+              # should take seconds takes minutes.
+              #
+              # Requests move only modestly, so scheduling is barely affected;
+              # the pod idles around 70m and only draws this while exporting.
+              cpu: "2"
+              memory: 1Gi

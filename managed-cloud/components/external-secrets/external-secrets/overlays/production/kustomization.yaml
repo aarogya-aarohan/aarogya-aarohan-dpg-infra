@@ -1,0 +1,60 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: arogyam
+resources:
+  - ../../base
+patches:
+  - target:
+      group: external-secrets.io
+      version: v1beta1
+      kind: ExternalSecret
+      name: hapi-db-creds
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: aa-prod-pg-app-creds
+      - op: replace
+        path: /spec/data/1/remoteRef/key
+        value: aa-prod-pg-app-creds
+  - target:
+      group: external-secrets.io
+      version: v1beta1
+      kind: ExternalSecret
+      name: keycloak-db-creds
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: aa-prod-pg-app-creds
+      - op: replace
+        path: /spec/data/1/remoteRef/key
+        value: aa-prod-pg-app-creds
+  - target:
+      group: external-secrets.io
+      version: v1beta1
+      kind: ExternalSecret
+      name: keycloak-admin
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: aa-prod-keycloak-admin
+      - op: replace
+        path: /spec/data/1/remoteRef/key
+        value: aa-prod-keycloak-admin
+  - target:
+      group: external-secrets.io
+      version: v1beta1
+      kind: ExternalSecret
+      name: arogyam-tenant-credentials
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: aa-prod-arogyam-tenant-credentials
+  - target:
+      group: external-secrets.io
+      version: v1beta1
+      kind: ExternalSecret
+      name: arogyam-dashboard-keycloak-tenants
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: aa-prod-dashboard-keycloak-tenants

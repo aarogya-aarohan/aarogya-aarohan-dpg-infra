@@ -1,0 +1,27 @@
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: keycloak-db-creds
+  namespace: arogyam
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: gcp-sm
+    kind: ClusterSecretStore
+  target:
+    name: keycloak-db-creds
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        database-user: "{{ .username }}"
+        database-password: "{{ .password }}"
+  data:
+    - secretKey: username
+      remoteRef:
+        key: __PG_APP_CREDS_SECRET__
+        property: keycloak_username
+    - secretKey: password
+      remoteRef:
+        key: __PG_APP_CREDS_SECRET__
+        property: keycloak_password

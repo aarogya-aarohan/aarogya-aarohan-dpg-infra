@@ -1,0 +1,155 @@
+[
+  {
+    "name": "Front Line Worker",
+    "realmRoles": [
+      "ACCESS_FHIR_ENDPOINT",
+      "FHIR_ALL_READ",
+      "FHIR_TRANSACTION",
+      "FHIR_WRITE_ALL_OF_TYPE",
+      "FHIR_BATCH",
+      "FHIR_ALL_WRITE",
+      "FHIR_TERMINOLOGY_READ",
+      "FHIR_ALL_DELETE",
+      "FHIR_CAPABILITIES",
+      "FHIR_OP_BINARY_ACCESS_WRITE"
+    ],
+    "clientRoles": {},
+    "attributes": {
+      "PERMISSION_ARGUMENT": [
+        "FHIR_WRITE_ALL_OF_TYPE/Encounter,Patient,Observation,Media,DocumentReference,Location,Task"
+      ]
+    }
+  },
+  {
+    "name": "Practitioner",
+    "realmRoles": [],
+    "clientRoles": {},
+    "attributes": {}
+  },
+  {
+    "name": "Reader",
+    "realmRoles": [
+      "FHIR_ALL_READ",
+      "FHIR_TRANSACTION",
+      "FHIR_READ_ALL_OF_TYPE",
+      "FHIR_EXTENDED_OPERATION_ON_TYPE",
+      "FHIR_WRITE_ALL_OF_TYPE",
+      "FHIR_ALL_WRITE",
+      "FHIR_EXTENDED_OPERATION_SUPERUSER",
+      "FHIR_OP_BINARY_ACCESS_READ",
+      "FHIR_EXTENDED_OPERATION_ON_ANY_INSTANCE"
+    ],
+    "clientRoles": {},
+    "attributes": {
+      "PERMISSION_ARGUMENT": [
+        "FHIR_WRITE_ALL_OF_TYPE/DiagnosticReport,Task",
+        "FHIR_READ_ALL_OF_TYPE/Task,Media,DocumentReference,Questionnaire",
+        "FHIR_EXTENDED_OPERATION_ON_TYPE/Questionnaire"
+      ]
+    }
+  },
+  {
+    "name": "Senior Specialist",
+    "realmRoles": [
+      "FHIR_ALL_READ",
+      "FHIR_TRANSACTION",
+      "FHIR_EXTENDED_OPERATION_ON_TYPE",
+      "FHIR_EXTENDED_OPERATION_ON_SERVER",
+      "FHIR_ALL_WRITE",
+      "FHIR_OP_ENCOUNTER_EVERYTHING",
+      "FHIR_OP_CQL",
+      "FHIR_EXTENDED_OPERATION_SUPERUSER",
+      "FHIR_OP_EXTRACT",
+      "FHIR_OP_BINARY_ACCESS_READ",
+      "FHIR_EXTENDED_OPERATION_ON_ANY_INSTANCE"
+    ],
+    "clientRoles": {},
+    "attributes": {
+      "FHIR_EXTENDED_OPERATION_ON_TYPE": [
+        "QuestionnaireResponse"
+      ]
+    }
+  },
+  {
+    "name": "Site Admin",
+    "realmRoles": [
+      "FHIR_ALL_READ",
+      "FHIR_BATCH",
+      "FHIR_ALL_WRITE",
+      "FHIR_OP_ENCOUNTER_EVERYTHING",
+      "FHIR_EXTENDED_OPERATION_SUPERUSER",
+      "FHIR_OP_BINARY_ACCESS_READ",
+      "FHIR_EXTENDED_OPERATION_ON_ANY_INSTANCE"
+    ],
+    "clientRoles": {
+      "realm-management": [
+        "realm-admin"
+      ]
+    },
+    "attributes": {}
+  },
+  {
+    "name": "Site Coordinator",
+    "realmRoles": [
+      "FHIR_ALL_READ",
+      "FHIR_TRANSACTION",
+      "FHIR_BATCH",
+      "FHIR_ALL_WRITE",
+      "FHIR_OP_ENCOUNTER_EVERYTHING",
+      "FHIR_EXTENDED_OPERATION_SUPERUSER",
+      "FHIR_OP_BINARY_ACCESS_READ",
+      "FHIR_EXTENDED_OPERATION_ON_ANY_INSTANCE"
+    ],
+    "clientRoles": {
+      "realm-management": [
+        "realm-admin"
+      ]
+    },
+    "attributes": {}
+  },
+  {
+    "name": "Specialist",
+    "realmRoles": [
+      "FHIR_ALL_READ",
+      "FHIR_TRANSACTION",
+      "FHIR_EXTENDED_OPERATION_ON_TYPE",
+      "FHIR_EXTENDED_OPERATION_ON_SERVER",
+      "FHIR_BATCH",
+      "FHIR_ALL_WRITE",
+      "FHIR_OP_ENCOUNTER_EVERYTHING",
+      "FHIR_OP_CQL",
+      "FHIR_EXTENDED_OPERATION_SUPERUSER",
+      "FHIR_OP_EXTRACT",
+      "FHIR_OP_BINARY_ACCESS_READ",
+      "FHIR_EXTENDED_OPERATION_ON_ANY_INSTANCE"
+    ],
+    "clientRoles": {},
+    "attributes": {
+      "FHIR_EXTENDED_OPERATION_ON_TYPE": [
+        "QuestionnaireResponse"
+      ]
+    }
+  },
+  {
+    "name": "Super Admin",
+    "realmRoles": [
+      "FHIR_ALL_READ",
+      "FHIR_TRANSACTION",
+      "FHIR_BATCH",
+      "FHIR_ALL_WRITE",
+      "FHIR_OP_PATIENT_EVERYTHING",
+      "FHIR_OP_ENCOUNTER_EVERYTHING",
+      "FHIR_ALL_DELETE",
+      "FHIR_EXTENDED_OPERATION_SUPERUSER",
+      "FHIR_EXTENDED_OPERATION_ON_ANY_INSTANCE",
+      "FHIR_OP_BINARY_ACCESS_READ",
+      "FHIR_OP_BINARY_ACCESS_WRITE"
+    ],
+    "clientRoles": {
+      "realm-management": [
+        "realm-admin"
+      ]
+    },
+    "attributes": {}
+  }
+]

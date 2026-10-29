@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: aa-stg
+  namespace: argocd
+spec:
+  description: Arogyam multi-tenant stack on the staging cluster
+  sourceRepos:
+    - git@github.com:YOUR_ORG/aarogya-aarohan-dpg-infra.git
+    - registry-1.docker.io/bitnamicharts
+  destinations:
+    - name: staging
+      namespace: arogyam
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

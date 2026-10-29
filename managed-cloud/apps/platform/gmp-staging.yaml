@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gmp-staging
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  destination:
+    name: staging
+    namespace: gmp-public
+  source:
+    repoURL: git@github.com:YOUR_ORG/aarogya-aarohan-dpg-infra.git
+    targetRevision: main
+    path: managed-cloud/components/gmp/overlays/staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Deliberately NO CreateNamespace=true. gmp-public and gmp-system are
+      # created and reconciled by the GKE GMP addon itself; letting ArgoCD claim ownership of either
+      # namespace invites a fight with the addon's own reconciler. If this
+      # Application ever shows gmp-public as OutOfSync-and-pruning against
+      # the namespace object itself, that's the signal something is
+      # mis-scoped.
+      - ServerSideApply=true

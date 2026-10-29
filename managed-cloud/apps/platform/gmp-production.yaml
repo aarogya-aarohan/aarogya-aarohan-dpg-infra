@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gmp-production
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  destination:
+    name: production
+    namespace: gmp-public
+  source:
+    repoURL: git@github.com:YOUR_ORG/aarogya-aarohan-dpg-infra.git
+    targetRevision: main
+    path: managed-cloud/components/gmp/overlays/production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Deliberately NO CreateNamespace=true — see gmp-staging.yaml's
+      # identical comment: gmp-public/gmp-system are owned by the GKE GMP
+      # addon's own reconciler, not by ArgoCD.
+      - ServerSideApply=true

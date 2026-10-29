@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: arogyam-dashboard-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "32k"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/client-body-buffer-size: 64k
+    nginx.ingress.kubernetes.io/client-header-buffer-size: 100k
+    nginx.ingress.kubernetes.io/http2-max-header-size: 96k
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - somehost.com
+      secretName: arogyam-dashboard-tls
+  rules:
+    - host: some-random-host
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: arogyam-dashboard
+                port:
+                  number: 80
+          - path: /auth/callback/
+            pathType: Prefix
+            backend:
+              service:
+                name: arogyam-dashboard
+                port:
+                  number: 80

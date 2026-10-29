@@ -1,0 +1,9 @@
+- op: replace #action
+  path: /spec/rules/0/host #resouirce we want to change
+  value: site.example.org
+- op: replace #action
+  path: /spec/tls/0/hosts/0 #resouirce we want to change
+  value: site.example.org
+- op: replace #action
+  path: /spec/tls/0/secretName #resouirce we want to change
+  value: arogyam-dashboard-tls

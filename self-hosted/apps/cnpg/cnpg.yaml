@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cnpg
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: arogyam-example-site
+            name: arogyam-example-site
+            project: arogyam-production
+  template:
+    metadata:
+      name: '{{name}}-cnpg'
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: '{{project}}'
+      source:
+        chart: cloudnative-pg
+        repoURL: https://cloudnative-pg.github.io/charts
+        targetRevision: 0.21.5
+        helm:
+          releaseName: cloudnative-pg
+      destination:
+        name: '{{cluster}}'
+        namespace: cnpg-system
+      syncPolicy:
+        automated:
+          selfHeal: true
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - Validate=true
+          - ServerSideApply=true

@@ -1,0 +1,24 @@
+# Staging-only for now (same promote-to-base-later pattern as the probe
+# patch in this directory) — apply here first, verify scraping works, then
+# consider whether/how to add an equivalent for overlays/production.
+#
+# Selector is app.kubernetes.io/part-of: fhir-gateway, NOT
+# app.kubernetes.io/name: fhir-gateway. In aa-stg the fhir-gateway Deployment
+# is scaled to 0 replicas (see overlays/staging/kustomization.yaml) — only
+# fhir-gateway-cron actually runs and serves traffic here. Both Deployments'
+# pods carry part-of: fhir-gateway, so matching on that label (rather than
+# name) is what actually picks up whichever Deployment is really running in
+# a given env — matching on name would silently select zero pods in staging.
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: fhir-gateway
+  namespace: arogyam
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: fhir-gateway
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

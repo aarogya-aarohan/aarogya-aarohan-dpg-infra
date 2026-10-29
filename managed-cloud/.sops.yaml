@@ -1,0 +1,15 @@
+# SOPS routing for the per-stack Terraform inputs (terraform/envs/<stack>/secrets.enc.json).
+#
+# Each operator generates an age keypair:
+#   age-keygen -o ~/.config/sops/age/keys.txt
+# and adds the public key ("age1...") below. After changing the list, re-encrypt
+# every file so the new recipient can decrypt it:
+#   sops updatekeys terraform/envs/<stack>/secrets.enc.json
+#
+# A cloud KMS key (GCP KMS, AWS KMS, Azure Key Vault) can replace age; see the
+# SOPS documentation for the gcp_kms / kms / azure_keyvault keys.
+creation_rules:
+  - path_regex: terraform/envs/.+/secrets\.enc\.json$
+    age: >-
+      age1REPLACE_WITH_OPERATOR_1_PUBLIC_KEY,
+      age1REPLACE_WITH_OPERATOR_2_PUBLIC_KEY

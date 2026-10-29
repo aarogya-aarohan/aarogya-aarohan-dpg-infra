@@ -1,0 +1,6 @@
+resources:
+  - fhir-db.yaml
+  - fhir.yaml
+  - fhir-ingress.yaml
+  - fhir-integration.yaml
+  - fhir-integration-ingress.yaml

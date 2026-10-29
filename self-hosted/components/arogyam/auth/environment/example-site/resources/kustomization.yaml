@@ -1,0 +1,17 @@
+resources:
+  - ../../../base
+
+patches:
+  - path: patch-arogyam-auth-db.yaml
+
+secretGenerator:
+  - name: arogyam-auth-db-secret
+    envs:
+      - .env-db.secret
+    options:
+      disableNameSuffixHash: true
+  - name: arogyam-auth-admin-secret
+    envs:
+      - .env-auth.secret
+    options:
+      disableNameSuffixHash: true

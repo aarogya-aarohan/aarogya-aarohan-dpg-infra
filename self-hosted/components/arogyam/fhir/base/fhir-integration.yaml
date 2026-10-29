@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arogyam-fhir-integration
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: arogyam-fhir-integration
+  template:
+    metadata:
+      labels:
+        app: arogyam-fhir-integration
+    spec:
+      containers:
+        - name: api
+          image: iisc/arogyam-fhir-gateway:v0.2.11
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: arogyam-fhir-integration-secret
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arogyam-fhir-integration
+spec:
+  selector:
+    app: arogyam-fhir-integration
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 3000

@@ -1,0 +1,3 @@
+resources:
+  - arogyam-dashboard.yaml
+  - arogyam-dashboard-ingress.yaml

@@ -1,0 +1,19 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: arogyam-auth-db
+spec:
+  storage:
+    size: 1Gi
+  backup:
+    barmanObjectStore:
+      destinationPath: "s3://<your-backup-bucket>/arogyam/example-site/"
+      endpointURL: "https://<your-s3-endpoint>"
+      s3Credentials:
+        accessKeyId:
+          name: arogyam-auth-db-secret
+          key: AWS_ACCESS_KEY_ID
+        secretAccessKey:
+          name: arogyam-auth-db-secret
+          key: AWS_ACCESS_SECRET_KEY
+    retentionPolicy: "7d"

@@ -1,0 +1,1744 @@
+{
+  "displayName": "Arogyam Platform",
+  "mosaicLayout": {
+    "columns": 12,
+    "tiles": [
+      {
+        "xPos": 0,
+        "yPos": 0,
+        "width": 12,
+        "height": 5,
+        "widget": {
+          "text": {
+            "format": "MARKDOWN",
+            "content": "# Arogyam Platform — monitoring guide\n\nThis dashboard covers both live environments — **aa-stg** (staging) and **aa-prod** (production) — side by side on every tile, so you can always compare current behavior against the same tenant/service in the other environment. The platform is multi-tenant: each hospital/site (tenant) is served by shared infrastructure — one ingress-nginx layer, one HAPI FHIR server, one Keycloak instance, and one Cloud SQL database per environment — partitioned internally by tenant, not by separate infrastructure per tenant.\n\nSections below run roughly in request order: **Traffic** (the edge, what's coming in) → **Per-tenant** (who it's from) → **Workloads** (is Kubernetes keeping pods healthy) → **HAPI FHIR** and **Keycloak** (the two application services actually serving those requests) → **Nodes** (is there compute headroom) → **Data** (Cloud SQL + GCS) → **Alerts** and **Availability** (what's already firing, and whether the platform is reachable from outside at all).\n\n**New to this system?** A good first move when something looks wrong is to work top to bottom: check Traffic for an obvious spike or 5xx surge, then Workloads for restarts/scheduling problems, then the specific service (HAPI FHIR or Keycloak) for JVM/error signals, then Nodes for a capacity ceiling.\n\n## Traffic — ingress-nginx\n\nEvery tile on this dashboard plots **aa-stg and aa-prod side by side** as separate legend series (e.g. \"... (aa-stg)\" / \"... (aa-prod)\") rather than a dashboard-wide environment picker — a single Cloud Monitoring template variable could not substitute reliably across every tile shape, so each environment is queried explicitly instead. Source: `prometheus.googleapis.com/nginx_ingress_controller_*`, scraped live from ingress-nginx via GMP in both environments. This is the first place to look for a platform-wide incident: a request-rate cliff means nothing is getting through; a 5xx spike above the 2%/10% thresholds means the platform is up but failing requests."
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 5,
+        "width": 4,
+        "height": 4,
+        "widget": {
+          "title": "Ingress request rate by ingress",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_requests/counter\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "metric.label.ingress"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${metric.label.ingress} (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_requests/counter\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "metric.label.ingress"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${metric.label.ingress} (aa-prod)"
+              }
+            ],
+            "yAxis": {
+              "label": "req/s",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 4,
+        "yPos": 5,
+        "width": 4,
+        "height": 4,
+        "widget": {
+          "title": "5xx error ratio (cluster-wide)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilterRatio": {
+                    "numerator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_requests/counter\" AND (metric.label.status = \"500\" OR metric.label.status = \"501\" OR metric.label.status = \"502\" OR metric.label.status = \"503\" OR metric.label.status = \"504\" OR metric.label.status = \"505\" OR metric.label.status = \"506\" OR metric.label.status = \"507\" OR metric.label.status = \"508\" OR metric.label.status = \"509\" OR metric.label.status = \"510\" OR metric.label.status = \"511\")",
+                      "aggregation": {
+                        "alignmentPeriod": "300s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM"
+                      }
+                    },
+                    "denominator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_requests/counter\"",
+                      "aggregation": {
+                        "alignmentPeriod": "300s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM"
+                      }
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-stg"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilterRatio": {
+                    "numerator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_requests/counter\" AND (metric.label.status = \"500\" OR metric.label.status = \"501\" OR metric.label.status = \"502\" OR metric.label.status = \"503\" OR metric.label.status = \"504\" OR metric.label.status = \"505\" OR metric.label.status = \"506\" OR metric.label.status = \"507\" OR metric.label.status = \"508\" OR metric.label.status = \"509\" OR metric.label.status = \"510\" OR metric.label.status = \"511\")",
+                      "aggregation": {
+                        "alignmentPeriod": "300s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM"
+                      }
+                    },
+                    "denominator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_requests/counter\"",
+                      "aggregation": {
+                        "alignmentPeriod": "300s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM"
+                      }
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-prod"
+              }
+            ],
+            "thresholds": [
+              {
+                "value": 0.02
+              },
+              {
+                "value": 0.1
+              }
+            ],
+            "yAxis": {
+              "label": "ratio",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 8,
+        "yPos": 5,
+        "width": 4,
+        "height": 4,
+        "widget": {
+          "title": "Latency p50 / p95 / p99",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_request_duration_seconds/histogram\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_DELTA",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_50"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p50 (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_request_duration_seconds/histogram\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_DELTA",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_50"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p50 (aa-prod)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_request_duration_seconds/histogram\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_DELTA",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p95 (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_request_duration_seconds/histogram\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_DELTA",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p95 (aa-prod)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_request_duration_seconds/histogram\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_DELTA",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_99"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p99 (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_request_duration_seconds/histogram\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_DELTA",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_99"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p99 (aa-prod)"
+              }
+            ],
+            "yAxis": {
+              "label": "seconds",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 9,
+        "width": 12,
+        "height": 2,
+        "widget": {
+          "text": {
+            "format": "MARKDOWN",
+            "content": "## Per-tenant traffic — one hostname per tenant\n\nEach tenant (hospital/site) is reached through its own hostname on the shared ingress, so these two tiles break the cluster-wide Traffic numbers above down per tenant. Use this to tell whether a spike or error surge is platform-wide or isolated to one tenant — a single elevated line usually points at that tenant's own usage pattern or a tenant-specific data issue, not an infra-wide problem."
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 11,
+        "width": 6,
+        "height": 4,
+        "widget": {
+          "title": "Request rate by host (tenant)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_requests/counter\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "metric.label.host"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${metric.label.host} (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_requests/counter\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "metric.label.host"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${metric.label.host} (aa-prod)"
+              }
+            ],
+            "yAxis": {
+              "label": "req/s",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 6,
+        "yPos": 11,
+        "width": 6,
+        "height": 4,
+        "widget": {
+          "title": "5xx error ratio by host (tenant)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilterRatio": {
+                    "numerator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_requests/counter\" AND (metric.label.status = \"500\" OR metric.label.status = \"501\" OR metric.label.status = \"502\" OR metric.label.status = \"503\" OR metric.label.status = \"504\" OR metric.label.status = \"505\" OR metric.label.status = \"506\" OR metric.label.status = \"507\" OR metric.label.status = \"508\" OR metric.label.status = \"509\" OR metric.label.status = \"510\" OR metric.label.status = \"511\")",
+                      "aggregation": {
+                        "alignmentPeriod": "300s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM",
+                        "groupByFields": [
+                          "metric.label.host"
+                        ]
+                      }
+                    },
+                    "denominator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_requests/counter\"",
+                      "aggregation": {
+                        "alignmentPeriod": "300s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM",
+                        "groupByFields": [
+                          "metric.label.host"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${metric.label.host} (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilterRatio": {
+                    "numerator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_requests/counter\" AND (metric.label.status = \"500\" OR metric.label.status = \"501\" OR metric.label.status = \"502\" OR metric.label.status = \"503\" OR metric.label.status = \"504\" OR metric.label.status = \"505\" OR metric.label.status = \"506\" OR metric.label.status = \"507\" OR metric.label.status = \"508\" OR metric.label.status = \"509\" OR metric.label.status = \"510\" OR metric.label.status = \"511\")",
+                      "aggregation": {
+                        "alignmentPeriod": "300s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM",
+                        "groupByFields": [
+                          "metric.label.host"
+                        ]
+                      }
+                    },
+                    "denominator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/nginx_ingress_controller_requests/counter\"",
+                      "aggregation": {
+                        "alignmentPeriod": "300s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM",
+                        "groupByFields": [
+                          "metric.label.host"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${metric.label.host} (aa-prod)"
+              }
+            ],
+            "yAxis": {
+              "label": "ratio",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 15,
+        "width": 12,
+        "height": 2,
+        "widget": {
+          "text": {
+            "format": "MARKDOWN",
+            "content": "## Workloads — GKE system metrics\n\nSourced from GKE's built-in `kubernetes.io/*` metrics (not the Prometheus/GMP scrape used in the sections below). This is the Kubernetes-level view of whether pods are actually staying up and scheduled: restarts, CPU/memory pressure against configured limits, and available replicas per deployment. A deployment repeatedly restarting or sitting below its expected replica count here — especially alongside a CPU/memory line pinned near 1.0 — usually means a pod can't get scheduled or is being OOM-killed, not an application bug. Staging and the ArgoCD hub currently run with no autoscaling headroom, so check the Nodes section below before assuming it's a code problem."
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 17,
+        "width": 3,
+        "height": 4,
+        "widget": {
+          "title": "Container restarts (delta)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"k8s_container\" AND resource.label.\"cluster_name\"=\"aa-stg\" AND metric.type=\"kubernetes.io/container/restart_count\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_DELTA",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "resource.label.container_name"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "STACKED_BAR",
+                "legendTemplate": "${resource.label.container_name} (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"k8s_container\" AND resource.label.\"cluster_name\"=\"aa-prod\" AND metric.type=\"kubernetes.io/container/restart_count\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_DELTA",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "resource.label.container_name"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "STACKED_BAR",
+                "legendTemplate": "${resource.label.container_name} (aa-prod)"
+              }
+            ],
+            "yAxis": {
+              "label": "restarts",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 3,
+        "yPos": 17,
+        "width": 3,
+        "height": 4,
+        "widget": {
+          "title": "Container CPU vs limit",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"k8s_container\" AND resource.label.\"cluster_name\"=\"aa-stg\" AND metric.type=\"kubernetes.io/container/cpu/limit_utilization\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "resource.label.container_name"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${resource.label.container_name} (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"k8s_container\" AND resource.label.\"cluster_name\"=\"aa-prod\" AND metric.type=\"kubernetes.io/container/cpu/limit_utilization\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "resource.label.container_name"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${resource.label.container_name} (aa-prod)"
+              }
+            ],
+            "yAxis": {
+              "label": "fraction of limit",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 6,
+        "yPos": 17,
+        "width": 3,
+        "height": 4,
+        "widget": {
+          "title": "Container memory vs limit",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"k8s_container\" AND resource.label.\"cluster_name\"=\"aa-stg\" AND metric.type=\"kubernetes.io/container/memory/limit_utilization\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "resource.label.container_name"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${resource.label.container_name} (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"k8s_container\" AND resource.label.\"cluster_name\"=\"aa-prod\" AND metric.type=\"kubernetes.io/container/memory/limit_utilization\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "resource.label.container_name"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${resource.label.container_name} (aa-prod)"
+              }
+            ],
+            "yAxis": {
+              "label": "fraction of limit",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 9,
+        "yPos": 17,
+        "width": 3,
+        "height": 4,
+        "widget": {
+          "title": "Available replicas per deployment (kube_deployment_status_replicas_available)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/kube_deployment_status_replicas_available/gauge\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "groupByFields": [
+                        "metric.label.deployment"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${metric.label.deployment} (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/kube_deployment_status_replicas_available/gauge\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "groupByFields": [
+                        "metric.label.deployment"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${metric.label.deployment} (aa-prod)"
+              }
+            ],
+            "yAxis": {
+              "label": "available replicas",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 21,
+        "width": 12,
+        "height": 2,
+        "widget": {
+          "text": {
+            "format": "MARKDOWN",
+            "content": "## HAPI FHIR — /actuator/prometheus\n\nHAPI FHIR is the clinical data server — every FHIR resource read/write for every tenant goes through it, so this section is the closest thing to an application-health view for the platform's core data path. Standard Micrometer JVM/HTTP metrics, scraped from HAPI's actuator endpoint. The `uri` label is almost always `UNKNOWN` on this deployment, so nothing here groups by endpoint path — only by outcome and method. **Watch for:** heap that climbs and never drops back after GC (possible leak or undersized heap), a rising GC pause rate (JVM under memory pressure), or a growing share of non-2xx outcomes in the request-rate tile."
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 23,
+        "width": 3,
+        "height": 4,
+        "widget": {
+          "title": "JVM heap used (jvm_memory_used_bytes, area=heap)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/jvm_memory_used_bytes/gauge\" AND metric.label.\"area\"=\"heap\" AND resource.label.\"job\"=\"hapi-fhir\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "metric.label.id"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${metric.label.id} (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/jvm_memory_used_bytes/gauge\" AND metric.label.\"area\"=\"heap\" AND resource.label.\"job\"=\"hapi-fhir\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "metric.label.id"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${metric.label.id} (aa-prod)"
+              }
+            ],
+            "yAxis": {
+              "label": "bytes",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 3,
+        "yPos": 23,
+        "width": 3,
+        "height": 4,
+        "widget": {
+          "title": "JVM GC pause rate + avg (jvm_gc_pause_seconds_count/_sum — pause-duration histogram buckets aren't exposed, so no percentiles)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/jvm_gc_pause_seconds_count/summary\" AND resource.label.\"job\"=\"hapi-fhir\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE",
+                      "crossSeriesReducer": "REDUCE_SUM"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "GC pauses/s (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/jvm_gc_pause_seconds_count/summary\" AND resource.label.\"job\"=\"hapi-fhir\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE",
+                      "crossSeriesReducer": "REDUCE_SUM"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "GC pauses/s (aa-prod)"
+              }
+            ],
+            "yAxis": {
+              "label": "pauses/s",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 6,
+        "yPos": 23,
+        "width": 3,
+        "height": 4,
+        "widget": {
+          "title": "HTTP request rate by outcome (http_server_requests_seconds_count — grouped by outcome/method, never uri)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/http_server_requests_seconds_count/summary\" AND resource.label.\"job\"=\"hapi-fhir\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "metric.label.outcome",
+                        "metric.label.method"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "STACKED_AREA",
+                "legendTemplate": "${metric.label.outcome} ${metric.label.method} (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/http_server_requests_seconds_count/summary\" AND resource.label.\"job\"=\"hapi-fhir\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "metric.label.outcome",
+                        "metric.label.method"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "STACKED_AREA",
+                "legendTemplate": "${metric.label.outcome} ${metric.label.method} (aa-prod)"
+              }
+            ],
+            "yAxis": {
+              "label": "req/s",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 9,
+        "yPos": 23,
+        "width": 3,
+        "height": 4,
+        "widget": {
+          "title": "HTTP avg latency (sum/count ratio — no percentile histogram available)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilterRatio": {
+                    "numerator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/http_server_requests_seconds_sum/summary:counter\" AND resource.label.\"job\"=\"hapi-fhir\"",
+                      "aggregation": {
+                        "alignmentPeriod": "60s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM"
+                      }
+                    },
+                    "denominator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/http_server_requests_seconds_count/summary\" AND resource.label.\"job\"=\"hapi-fhir\"",
+                      "aggregation": {
+                        "alignmentPeriod": "60s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM"
+                      }
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-stg"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilterRatio": {
+                    "numerator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/http_server_requests_seconds_sum/summary:counter\" AND resource.label.\"job\"=\"hapi-fhir\"",
+                      "aggregation": {
+                        "alignmentPeriod": "60s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM"
+                      }
+                    },
+                    "denominator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/http_server_requests_seconds_count/summary\" AND resource.label.\"job\"=\"hapi-fhir\"",
+                      "aggregation": {
+                        "alignmentPeriod": "60s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM"
+                      }
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-prod"
+              }
+            ],
+            "yAxis": {
+              "label": "seconds/request",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 27,
+        "width": 12,
+        "height": 2,
+        "widget": {
+          "text": {
+            "format": "MARKDOWN",
+            "content": "## Keycloak — /auth/realms/master/metrics\n\nKeycloak is the identity provider behind every login on the platform — if it's unhealthy, users can't authenticate even if HAPI FHIR and everything else is fine. Scraped via the aerogear `keycloak-metrics-spi`, which uses classic prometheus-client metric naming — different from the Micrometer names in the HAPI FHIR section above, so the two JVM heap tiles measure the same underlying thing but under different metric names. **Watch for:** the error ratio crossing its 2%/10% thresholds, or a rising p95/p99 that would show up to users as slow logins."
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 29,
+        "width": 3,
+        "height": 4,
+        "widget": {
+          "title": "JVM heap used (jvm_memory_bytes_used, area=heap)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/jvm_memory_bytes_used/gauge\" AND metric.label.\"area\"=\"heap\" AND resource.label.\"job\"=\"keycloak\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-stg"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/jvm_memory_bytes_used/gauge\" AND metric.label.\"area\"=\"heap\" AND resource.label.\"job\"=\"keycloak\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-prod"
+              }
+            ],
+            "yAxis": {
+              "label": "bytes",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 3,
+        "yPos": 29,
+        "width": 3,
+        "height": 4,
+        "widget": {
+          "title": "Request rate by outcome (keycloak_response_total — grouped by code/method)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/keycloak_response_total/counter\" AND resource.label.\"job\"=\"keycloak\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "metric.label.code",
+                        "metric.label.method"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "STACKED_AREA",
+                "legendTemplate": "${metric.label.code} ${metric.label.method} (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/keycloak_response_total/counter\" AND resource.label.\"job\"=\"keycloak\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_RATE",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "metric.label.code",
+                        "metric.label.method"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "STACKED_AREA",
+                "legendTemplate": "${metric.label.code} ${metric.label.method} (aa-prod)"
+              }
+            ],
+            "yAxis": {
+              "label": "req/s",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 6,
+        "yPos": 29,
+        "width": 3,
+        "height": 4,
+        "widget": {
+          "title": "Error ratio (keycloak_response_errors_total / keycloak_response_total)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilterRatio": {
+                    "numerator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/keycloak_response_errors_total/counter\" AND resource.label.\"job\"=\"keycloak\"",
+                      "aggregation": {
+                        "alignmentPeriod": "300s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM"
+                      }
+                    },
+                    "denominator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/keycloak_response_total/counter\" AND resource.label.\"job\"=\"keycloak\"",
+                      "aggregation": {
+                        "alignmentPeriod": "300s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM"
+                      }
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-stg"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilterRatio": {
+                    "numerator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/keycloak_response_errors_total/counter\" AND resource.label.\"job\"=\"keycloak\"",
+                      "aggregation": {
+                        "alignmentPeriod": "300s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM"
+                      }
+                    },
+                    "denominator": {
+                      "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/keycloak_response_total/counter\" AND resource.label.\"job\"=\"keycloak\"",
+                      "aggregation": {
+                        "alignmentPeriod": "300s",
+                        "perSeriesAligner": "ALIGN_RATE",
+                        "crossSeriesReducer": "REDUCE_SUM"
+                      }
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-prod"
+              }
+            ],
+            "thresholds": [
+              {
+                "value": 0.02
+              },
+              {
+                "value": 0.1
+              }
+            ],
+            "yAxis": {
+              "label": "ratio",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 9,
+        "yPos": 29,
+        "width": 3,
+        "height": 4,
+        "widget": {
+          "title": "Latency p50 / p95 / p99",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/keycloak_request_duration/histogram\" AND resource.label.\"job\"=\"keycloak\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_DELTA",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_50"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p50 (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/keycloak_request_duration/histogram\" AND resource.label.\"job\"=\"keycloak\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_DELTA",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_50"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p50 (aa-prod)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/keycloak_request_duration/histogram\" AND resource.label.\"job\"=\"keycloak\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_DELTA",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p95 (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/keycloak_request_duration/histogram\" AND resource.label.\"job\"=\"keycloak\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_DELTA",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p95 (aa-prod)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/keycloak_request_duration/histogram\" AND resource.label.\"job\"=\"keycloak\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_DELTA",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_99"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p99 (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/keycloak_request_duration/histogram\" AND resource.label.\"job\"=\"keycloak\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_DELTA",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_99"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p99 (aa-prod)"
+              }
+            ],
+            "yAxis": {
+              "label": "seconds",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 33,
+        "width": 12,
+        "height": 2,
+        "widget": {
+          "text": {
+            "format": "MARKDOWN",
+            "content": "## Nodes — allocatable vs. committed\n\nThe raw compute-capacity view: how much of each node's allocatable CPU/memory is already committed by pod requests, independent of whether those pods are actually using it. Staging and the ArgoCD hub currently run a single node each with `node_max_count=1` in Terraform — no further autoscaling headroom — so these tiles are the early warning for the exact failure mode that has already happened once on this platform: a new deployment unable to schedule because existing pods have already claimed the node's capacity. **If either line crosses the 0.9 threshold**, a new pod won't schedule until something is deleted/scaled down, or `node_max_count` is raised (`terraform/modules/gke-cluster`)."
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 35,
+        "width": 6,
+        "height": 4,
+        "widget": {
+          "title": "Node CPU allocatable committed (kubernetes.io/node/cpu/allocatable_utilization)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"k8s_node\" AND resource.label.\"cluster_name\"=\"aa-stg\" AND metric.type=\"kubernetes.io/node/cpu/allocatable_utilization\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "resource.label.node_name"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${resource.label.node_name} (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"k8s_node\" AND resource.label.\"cluster_name\"=\"aa-prod\" AND metric.type=\"kubernetes.io/node/cpu/allocatable_utilization\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "resource.label.node_name"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${resource.label.node_name} (aa-prod)"
+              }
+            ],
+            "thresholds": [
+              {
+                "value": 0.9
+              }
+            ],
+            "yAxis": {
+              "label": "fraction of allocatable",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 6,
+        "yPos": 35,
+        "width": 6,
+        "height": 4,
+        "widget": {
+          "title": "Node memory allocatable committed (kubernetes.io/node/memory/allocatable_utilization)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"k8s_node\" AND resource.label.\"cluster_name\"=\"aa-stg\" AND metric.type=\"kubernetes.io/node/memory/allocatable_utilization\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "resource.label.node_name"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${resource.label.node_name} (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"k8s_node\" AND resource.label.\"cluster_name\"=\"aa-prod\" AND metric.type=\"kubernetes.io/node/memory/allocatable_utilization\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": [
+                        "resource.label.node_name"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "${resource.label.node_name} (aa-prod)"
+              }
+            ],
+            "thresholds": [
+              {
+                "value": 0.9
+              }
+            ],
+            "yAxis": {
+              "label": "fraction of allocatable",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 39,
+        "width": 12,
+        "height": 2,
+        "widget": {
+          "text": {
+            "format": "MARKDOWN",
+            "content": "## Data — Cloud SQL + per-tenant GCS\n\nCloud SQL holds every tenant's clinical (HAPI FHIR) and identity (Keycloak) data in one shared Postgres instance per environment; GCS holds per-tenant media/attachments in one bucket per tenant. Filtered on `database_id` / bucket name rather than a cluster label, since neither resource type carries one. **Watch for:** CPU/disk utilisation approaching its 0.85 threshold (production is REGIONAL/HA with daily PITR backups; staging is ZONAL with shorter retention — see `docs/monitoring.md`), and connection count trending toward Cloud SQL's connection limit. Replication lag is expected to always read no data — see that tile's own note."
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 41,
+        "width": 4,
+        "height": 4,
+        "widget": {
+          "title": "Cloud SQL CPU + disk utilisation (aa-stg + aa-prod)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"cloudsql_database\" AND metric.type=\"cloudsql.googleapis.com/database/cpu/utilization\" AND resource.label.\"database_id\"=\"your-gcp-project-id:aa-stg-pg\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "CPU (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"cloudsql_database\" AND metric.type=\"cloudsql.googleapis.com/database/cpu/utilization\" AND resource.label.\"database_id\"=\"your-gcp-project-id:aa-prod-pg\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "CPU (aa-prod)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"cloudsql_database\" AND metric.type=\"cloudsql.googleapis.com/database/disk/utilization\" AND resource.label.\"database_id\"=\"your-gcp-project-id:aa-stg-pg\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "Disk (aa-stg)"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"cloudsql_database\" AND metric.type=\"cloudsql.googleapis.com/database/disk/utilization\" AND resource.label.\"database_id\"=\"your-gcp-project-id:aa-prod-pg\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "Disk (aa-prod)"
+              }
+            ],
+            "thresholds": [
+              {
+                "value": 0.85
+              }
+            ],
+            "yAxis": {
+              "label": "fraction",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 4,
+        "yPos": 41,
+        "width": 4,
+        "height": 4,
+        "widget": {
+          "title": "Cloud SQL connections (aa-stg + aa-prod)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"cloudsql_database\" AND metric.type=\"cloudsql.googleapis.com/database/postgresql/num_backends\" AND resource.label.\"database_id\"=\"your-gcp-project-id:aa-stg-pg\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-stg"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"cloudsql_database\" AND metric.type=\"cloudsql.googleapis.com/database/postgresql/num_backends\" AND resource.label.\"database_id\"=\"your-gcp-project-id:aa-prod-pg\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-prod"
+              }
+            ],
+            "yAxis": {
+              "label": "connections",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 8,
+        "yPos": 41,
+        "width": 4,
+        "height": 4,
+        "widget": {
+          "title": "Cloud SQL replication lag (aa-stg + aa-prod) — expected to show no data; neither environment runs a read replica (docs/monitoring.md)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"cloudsql_database\" AND metric.type=\"cloudsql.googleapis.com/database/replication/replica_lag\" AND resource.label.\"database_id\"=\"your-gcp-project-id:aa-stg-pg\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-stg"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"cloudsql_database\" AND metric.type=\"cloudsql.googleapis.com/database/replication/replica_lag\" AND resource.label.\"database_id\"=\"your-gcp-project-id:aa-prod-pg\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-prod"
+              }
+            ],
+            "yAxis": {
+              "label": "seconds",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 45,
+        "width": 6,
+        "height": 4,
+        "widget": {
+          "title": "GCS per-tenant bucket object count (aa-stg + aa-prod)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"gcs_bucket\" AND metric.type=\"storage.googleapis.com/storage/object_count\" AND resource.label.\"bucket_name\"=starts_with(\"aa-stg-\") AND resource.label.\"bucket_name\"=ends_with(\"-fhir-media\")",
+                    "aggregation": {
+                      "alignmentPeriod": "86400s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "groupByFields": [
+                        "resource.label.bucket_name"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"gcs_bucket\" AND metric.type=\"storage.googleapis.com/storage/object_count\" AND resource.label.\"bucket_name\"=starts_with(\"aa-prod-\") AND resource.label.\"bucket_name\"=ends_with(\"-fhir-media\")",
+                    "aggregation": {
+                      "alignmentPeriod": "86400s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "groupByFields": [
+                        "resource.label.bucket_name"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE"
+              }
+            ],
+            "yAxis": {
+              "label": "objects",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 6,
+        "yPos": 45,
+        "width": 6,
+        "height": 4,
+        "widget": {
+          "title": "GCS per-tenant bucket total size (aa-stg + aa-prod)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"gcs_bucket\" AND metric.type=\"storage.googleapis.com/storage/total_bytes\" AND resource.label.\"bucket_name\"=starts_with(\"aa-stg-\") AND resource.label.\"bucket_name\"=ends_with(\"-fhir-media\")",
+                    "aggregation": {
+                      "alignmentPeriod": "86400s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "groupByFields": [
+                        "resource.label.bucket_name"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"gcs_bucket\" AND metric.type=\"storage.googleapis.com/storage/total_bytes\" AND resource.label.\"bucket_name\"=starts_with(\"aa-prod-\") AND resource.label.\"bucket_name\"=ends_with(\"-fhir-media\")",
+                    "aggregation": {
+                      "alignmentPeriod": "86400s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "groupByFields": [
+                        "resource.label.bucket_name"
+                      ]
+                    }
+                  }
+                },
+                "plotType": "LINE"
+              }
+            ],
+            "yAxis": {
+              "label": "bytes",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 49,
+        "width": 12,
+        "height": 2,
+        "widget": {
+          "text": {
+            "format": "MARKDOWN",
+            "content": "## Alerts\n\nWhat's currently configured to page or notify, and where to go to see what's actually firing right now."
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 51,
+        "width": 12,
+        "height": 6,
+        "widget": {
+          "title": "Alert policies",
+          "text": {
+            "format": "MARKDOWN",
+            "content": "This platform's alert policies — error ratios, latency, node capacity, TLS cert expiry, and more — are all defined in `terraform/envs/monitoring/alerts.tf`, not as individual tiles here. Cloud Monitoring's dashboard widgets can only bind to one named policy at a time, and policy IDs aren't known until after `terraform apply`, so a live embedded incident list isn't practical from this file.\n\n**To triage an alert:** open [Alerting incidents](https://console.cloud.google.com/monitoring/alerting/incidents?project=your-gcp-project-id), filtered by the `env` label (`aa-stg` / `aa-prod`), or browse [all policies](https://console.cloud.google.com/monitoring/alerting/policies?project=your-gcp-project-id) directly.\n\nWant a per-policy incident tile instead? Add one `alertChart` tile per policy once `terraform apply` has produced real policy IDs (`terraform output`, or `google_monitoring_alert_policy.<name>[\"aa-stg\"].name`)."
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 57,
+        "width": 12,
+        "height": 3,
+        "widget": {
+          "text": {
+            "content": "## Availability — synthetic uptime + internal health probes\n\nTwo different checks live in this section: **external synthetic uptime checks** against the platform's public hostnames (top row) and arogyam-dashboard's own **internal health probe** (bottom row, blackbox-exporter based, scraped like any other in-cluster target). This is the only external, black-box view on the dashboard — it reflects what a real user or API client would see, independent of whether anything inside the cluster reports itself healthy.\n\n**Public hostname checks** back the `cert_expiry` alert policy (`terraform/envs/monitoring/alerts.tf`) and are filtered on the literal configured hostname rather than the uptime check's generated ID, which is only known after `terraform apply`. **Status: currently show no data** — they depend on a DNS fix that is still an open ask with the platform team (`docs/deployment-guide.md (prerequisites)` §5). Until that's resolved, this platform has no working external uptime signal.\n\n**Internal probe** is confirmed live and working — a real value here is your fastest signal that arogyam-dashboard itself is reachable and responding from inside the cluster.",
+            "format": "MARKDOWN"
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 60,
+        "width": 6,
+        "height": 4,
+        "widget": {
+          "title": "Public hostname uptime (check_passed)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"uptime_url\" AND metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.label.\"host\"=\"staging.example.org\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_FRACTION_TRUE",
+                      "crossSeriesReducer": "REDUCE_MEAN"
+                    }
+                  }
+                },
+                "legendTemplate": "staging.example.org",
+                "plotType": "LINE"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"uptime_url\" AND metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.label.\"host\"=\"production.example.org\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_FRACTION_TRUE",
+                      "crossSeriesReducer": "REDUCE_MEAN"
+                    }
+                  }
+                },
+                "legendTemplate": "production.example.org",
+                "plotType": "LINE"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"uptime_url\" AND metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.label.\"host\"=\"argocd.example.org\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_FRACTION_TRUE",
+                      "crossSeriesReducer": "REDUCE_MEAN"
+                    }
+                  }
+                },
+                "legendTemplate": "argocd.example.org",
+                "plotType": "LINE"
+              }
+            ],
+            "yAxis": {
+              "label": "1 = passing",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 6,
+        "yPos": 60,
+        "width": 6,
+        "height": 4,
+        "widget": {
+          "title": "TLS certificate expiry (days remaining)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"uptime_url\" AND metric.type=\"monitoring.googleapis.com/uptime_check/time_until_ssl_cert_expires\" AND resource.label.\"host\"=\"staging.example.org\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN"
+                    }
+                  }
+                },
+                "legendTemplate": "staging.example.org",
+                "plotType": "LINE"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"uptime_url\" AND metric.type=\"monitoring.googleapis.com/uptime_check/time_until_ssl_cert_expires\" AND resource.label.\"host\"=\"production.example.org\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN"
+                    }
+                  }
+                },
+                "legendTemplate": "production.example.org",
+                "plotType": "LINE"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"uptime_url\" AND metric.type=\"monitoring.googleapis.com/uptime_check/time_until_ssl_cert_expires\" AND resource.label.\"host\"=\"argocd.example.org\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN"
+                    }
+                  }
+                },
+                "legendTemplate": "argocd.example.org",
+                "plotType": "LINE"
+              }
+            ],
+            "yAxis": {
+              "label": "days",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 64,
+        "width": 6,
+        "height": 4,
+        "widget": {
+          "title": "arogyam-dashboard internal health probe (probe_success)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/probe_success/gauge\" AND resource.label.\"job\"=\"arogyam-dashboard-blackbox\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-stg"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/probe_success/gauge\" AND resource.label.\"job\"=\"arogyam-dashboard-blackbox\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-prod"
+              }
+            ],
+            "yAxis": {
+              "label": "1 = passing",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 6,
+        "yPos": 64,
+        "width": 6,
+        "height": 4,
+        "widget": {
+          "title": "arogyam-dashboard internal probe latency (probe_duration_seconds)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-stg\" AND metric.type=\"prometheus.googleapis.com/probe_duration_seconds/gauge\" AND resource.label.\"job\"=\"arogyam-dashboard-blackbox\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-stg"
+              },
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"prometheus_target\" AND resource.label.\"cluster\"=\"aa-prod\" AND metric.type=\"prometheus.googleapis.com/probe_duration_seconds/gauge\" AND resource.label.\"job\"=\"arogyam-dashboard-blackbox\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "aa-prod"
+              }
+            ],
+            "yAxis": {
+              "label": "seconds",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

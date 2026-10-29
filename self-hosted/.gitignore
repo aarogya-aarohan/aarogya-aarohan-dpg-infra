@@ -1,0 +1,2 @@
+# Per-site secret env files: create from the matching .env-*.example, never commit
+*.secret

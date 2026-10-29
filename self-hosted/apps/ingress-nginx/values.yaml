@@ -1,0 +1,12 @@
+controller:
+  config:
+    log-format-escape-json: "true"
+    log-format-upstream: '{"network":{"forwarded_ip":"$http_x_forwarded_for","forwarded":"$http_x_forwarded_host"},"user_agent":{"original":"$http_user_agent"},"http":{"version":"$server_protocol","request":{"body":{"bytes":$body_bytes_sent},"bytes":$request_length,"method":"$request_method","referrer":"$http_referer"},"response":{"body":{"bytes":$body_bytes_sent},"bytes":$bytes_sent,"status_code":"$status","time":$request_time,"upstream_time":$upstream_response_time}},"url":{"domain":"$host","path":"$uri","query":"$args","original":"$request_uri"}}'
+    # Increase header and buffer sizes
+    large-client-header-buffers: "8 512k"
+    client-header-buffer-size: "100k"
+    client-body-buffer-size: "64k"
+    proxy-buffer-size: "512k"
+    proxy-buffers: "16 512k"
+    proxy-busy-buffers-size: "512k"
+    proxy-body-size: "200m"

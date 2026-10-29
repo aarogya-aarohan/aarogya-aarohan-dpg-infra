@@ -1,0 +1,9 @@
+# The ArgoCD repository credential for this repo is created by Terraform
+# (terraform/modules/argocd) reading the SSH private key from the GCP Secret
+# Manager secret aa-argocd-repo-sshkey. There is no GitOps-managed Secret here
+# because seeding the cred via GitOps would require ArgoCD to already have repo
+# access — chicken and egg.
+#
+# To rotate: replace the value of aa-argocd-repo-sshkey in Secret Manager and
+# run `terraform apply` in terraform/envs/argocd/. The Secret in the cluster
+# updates in place.

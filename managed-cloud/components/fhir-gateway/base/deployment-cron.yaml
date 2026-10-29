@@ -1,0 +1,85 @@
+# Cron-runner variant of fhir-gateway: same image and env, but RUN_CRONS=true
+# and pinned to a single replica so every in-app cron fires exactly once per
+# env (web replicas run with RUN_CRONS=false). The pod also serves HTTP — the
+# Service selects on app.kubernetes.io/part-of, which both Deployments' pods
+# carry. Recreate strategy so a rollout never briefly runs two cron pods
+# (the FHIR cron lock is not atomic).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fhir-gateway-cron
+  namespace: arogyam
+  labels:
+    app.kubernetes.io/name: fhir-gateway-cron
+    app.kubernetes.io/part-of: fhir-gateway
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fhir-gateway-cron
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fhir-gateway-cron
+        app.kubernetes.io/part-of: fhir-gateway
+    spec:
+      serviceAccountName: fhir-gateway
+      containers:
+        - name: fhir-gateway
+          image: iisc/arogyam-fhir-gateway:v0.2.49
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: fhir-gateway-config
+          env:
+            - name: RUN_CRONS
+              value: "true"
+            # Per-env values are supplied via the overlay patch (it targets both
+            # Deployments through the part-of label). Keep the placeholders in
+            # sync with base/deployment.yaml.
+            - name: FHIR_BASE_URL
+              value: __FHIR_BASE_URL__
+            - name: FHIR_TOKEN_URL
+              value: __FHIR_TOKEN_URL__
+            - name: FHIR_CLIENT_ID
+              value: __FHIR_CLIENT_ID__
+            - name: FHIR_CLIENT_SECRET
+              value: __FHIR_CLIENT_SECRET__
+          volumeMounts:
+            - name: tenant-credentials
+              mountPath: /etc/arogyam
+              readOnly: true
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 4
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: tenant-credentials
+          secret:
+            secretName: arogyam-tenant-credentials
+            optional: true
+            items:
+              - key: tenant-credentials.json
+                path: tenant-credentials.json

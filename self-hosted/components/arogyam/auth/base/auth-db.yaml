@@ -1,0 +1,58 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: arogyam-auth-db
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.3-4-bullseye
+  instances: 1
+  bootstrap:
+    initdb:
+      database: keycloak
+      owner: keycloak
+  storage:
+    size: 1Gi
+# Restore from backup
+#  bootstrap:
+    # Alternative bootstrap method: start from a backup
+    #recovery:
+    #  backup:
+    #    name: outpost-db-strapi-backup
+  # Update the backup conf when deploying to production
+  # See https://cloudnative-pg.io/documentation/1.21/appendixes/object_stores/#aws-s3 for more info
+  backup:
+    barmanObjectStore:
+      destinationPath: "s3://<Some-bucket>/<Path in bucket>"
+      endpointURL: "<S3 Endpoint location>"
+      s3Credentials:
+        accessKeyId:
+          name: <AROGYAM_S3_KEY_ID>
+          key: AWS_ACCESS_KEY_ID
+        secretAccessKey:
+          name: <AROGYAM_S3_KEY_SECRET>
+          key: AWS_ACCESS_SECRET_KEY
+      tags:
+        backupRetentionPolicy: "expire"
+      historyTags:
+          backupRetentionPolicy: "keep"
+      wal:
+        compression: gzip
+        encryption: AES256
+      data:
+        compression: gzip
+        encryption: AES256
+        jobs: 2
+    retentionPolicy: "7d"
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: arogyam-auth-db-backup-scheduled
+spec:
+  schedule: "0 0 0 * * *"
+  immediate: true
+  backupOwnerReference: self
+  method: barmanObjectStore
+  cluster:
+    name: arogyam-auth-db

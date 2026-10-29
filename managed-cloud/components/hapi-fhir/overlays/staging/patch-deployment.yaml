@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hapi-fhir
+  namespace: arogyam
+spec:
+  replicas: 1
+  # Recreate, not RollingUpdate. Staging is a single node that is request-bound
+  # (~3556m of 3920m CPU already requested), and HAPI asks for 1 CPU + 2Gi — so
+  # a rolling update has nowhere to place the surge pod and the new ReplicaSet
+  # sits Pending indefinitely while the old pod keeps serving. Recreate takes
+  # the old pod down first, which is the only way a replacement fits.
+  #
+  # The cost is a brief HAPI outage on every staging rollout. Acceptable there,
+  # and better than a rollout that silently never completes. Production has three
+  # nodes and two replicas, so it keeps the default RollingUpdate from base.
+  strategy:
+    type: Recreate
+    # Base sets maxSurge/maxUnavailable; the API rejects a rollingUpdate block
+    # alongside type: Recreate, so it has to be removed rather than ignored.
+    rollingUpdate: null
+  template:
+    spec:
+      containers:
+        - name: hapi-fhir
+          resources:
+            # Staging HAPI idles at ~13m CPU against a reserved full core —
+            # the single biggest reason this node reads 77% requested while
+            # using 23%. That gap is what forces Recreate for rollouts above.
+            #
+            # Memory goes the other way: the pod holds ~2.2Gi, i.e. more than
+            # the 2Gi it asks for, which makes it an eviction candidate on its
+            # own node. Limits are inherited from base unchanged (4 CPU / 4Gi)
+            # — staging runs migration and import work that genuinely needs
+            # burst room, and limits are not what is constraining scheduling.
+            requests:
+              cpu: 250m
+              memory: 2560Mi
+        - name: cloud-sql-proxy
+          args:
+            - --private-ip
+            - --auto-iam-authn=false
+            - --port=5432
+            - your-gcp-project-id:asia-south1:aa-stg-pg

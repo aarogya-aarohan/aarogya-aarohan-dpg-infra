@@ -1,0 +1,19 @@
+resources:
+  - ../../../base
+
+patches:
+  - path: patch-arogyam-gateway-ingress.yaml
+    target:
+      group: networking.k8s.io
+      version: v1
+      kind: Ingress
+      name: arogyam-dashboard-ingress
+
+secretGenerator:
+  - name: arogyam-dashboard-secret
+    envs:
+      - .env-dashboard.secret
+
+images:
+  - name: iisc/arogyam-dashboard:ccccdb4
+    newTag: 8858ead

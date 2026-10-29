@@ -1,0 +1,80 @@
+image:
+  repository: bitnamilegacy/keycloak
+  tag: 26.3.2-debian-12-r1
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+auth:
+  existingSecret: keycloak-admin
+  passwordSecretKey: admin-password
+  adminUser: admin
+
+postgresql:
+  enabled: false
+
+externalDatabase:
+  host: 127.0.0.1
+  port: 5432
+  database: keycloak
+  existingSecret: keycloak-db-creds
+  existingSecretUserKey: database-user
+  existingSecretPasswordKey: database-password
+
+# extraEnvVars is set per-env (values-staging.yaml / values-production.yaml)
+# because KC_HOSTNAME differs per env. Helm replaces (not merges) lists, so
+# duplicating here would silently drop the per-env overrides.
+
+production: true
+# `proxy: edge` is retained ONLY to satisfy this chart's production-mode
+# validation (NOTES.txt requires production => tls.enabled || proxy set).
+# The resulting `proxy=edge` line in keycloak.conf is a no-op on Keycloak 26
+# (the --proxy flag was removed). Actual proxy/hostname behaviour is driven
+# by KC_PROXY_HEADERS / KC_HOSTNAME in the per-env extraEnvVars, which
+# override keycloak.conf at runtime.
+proxy: edge
+httpRelativePath: /auth/
+
+serviceAccount:
+  create: true
+  name: keycloak
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hostname: __HOSTNAME__
+  path: /auth/
+  pathType: Prefix
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-buffer-size: 16k
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+# Cloud SQL Auth Proxy sidecar — Bitnami chart appends sidecars to the main pod.
+sidecars:
+  - name: cloud-sql-proxy
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.13.0
+    imagePullPolicy: IfNotPresent
+    args:
+      - --private-ip
+      - --auto-iam-authn=false
+      - --port=5432
+      - __DB_CONNECTION_NAME__
+    securityContext:
+      runAsNonRoot: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi

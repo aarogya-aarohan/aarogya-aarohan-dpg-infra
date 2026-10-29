@@ -1,0 +1,39 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: arogyam
+resources:
+  - ../../base
+  - podmonitoring.yaml
+images:
+  - name: iisc/arogyam-fhir-gateway
+    newTag: v0.2.60
+patches:
+  # labelSelector (not name) so the per-env env block lands on both the web
+  # and cron Deployments; kustomize ignores the patch body's metadata.name for
+  # renaming (allowNameChange defaults to false).
+  - path: patch-deployment.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      labelSelector: app.kubernetes.io/part-of=fhir-gateway
+  # Staging runs a single pod total: the cron Deployment's pod (RUN_CRONS=true)
+  # also serves all traffic; the web Deployment is scaled to zero.
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: fhir-gateway
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: Ingress
+      name: fhir-gateway
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: staging.example.org

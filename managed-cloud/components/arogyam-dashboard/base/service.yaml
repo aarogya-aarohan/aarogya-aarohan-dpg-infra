@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: arogyam-dashboard
+  namespace: arogyam
+  labels:
+    app.kubernetes.io/name: arogyam-dashboard
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: arogyam-dashboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+      protocol: TCP
