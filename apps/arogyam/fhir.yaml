@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: arogyam-fhir
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: arogyam-example-site
+            namePrefix: arogyam-example-site
+            project: arogyam-production
+            environment: example-site
+            namespace: production
+  template:
+    metadata:
+      name: '{{namePrefix}}-fhir'
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: '{{project}}'
+      sources:
+        - path: 'components/arogyam/fhir/environment/{{environment}}/resources'
+          repoURL: 'git@github.com:YOUR_ORG/aarogya-aarohan-dpg-infra.git'
+          targetRevision: HEAD
+      destination:
+        name: '{{cluster}}'
+        namespace: '{{namespace}}'
+      syncPolicy:
+        automated:
+          selfHeal: true
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - Validate=true

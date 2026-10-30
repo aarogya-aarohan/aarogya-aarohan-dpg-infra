@@ -31,9 +31,9 @@ We will credit you in the advisory unless you prefer to remain anonymous.
 
 ## Scope
 
-In scope: the code and configuration in this repository (both `managed-cloud/` and `self-hosted/`), including Terraform modules, Kubernetes manifests, Helm values and scripts.
+In scope: the code and configuration in this repository, including Kubernetes manifests, Helm values and scripts.
 
-Vulnerabilities in upstream projects (HAPI FHIR, Keycloak, ArgoCD, ingress-nginx, External Secrets Operator, CloudNativePG, MinIO, k3s, Kubernetes) should be reported to those projects. Tell us as well if the issue affects how this repository configures them.
+Vulnerabilities in upstream projects (HAPI FHIR, Keycloak, ArgoCD, ingress-nginx, cert-manager, CloudNativePG, MinIO, k3s, Kubernetes) should be reported to those projects. Tell us as well if the issue affects how this repository configures them.
 
 ## Supported versions
 
@@ -41,7 +41,6 @@ Only the latest commit on `main` is supported. Deployments should track the curr
 
 ## Security practices in this repository
 
-- No secrets are committed. In managed-cloud, Terraform variables are SOPS-encrypted and runtime secrets live in a cloud secret store; in self-hosted, per-site env files are git-ignored.
-- Managed-cloud workloads authenticate to cloud APIs with workload identity; no service-account key files.
-- Clusters and databases are private; managed-cloud administration goes through an identity-aware bastion, and self-hosted k3s binds only to the private network.
-- Each tenant's data is isolated by identity realm, token claim, FHIR partition and storage bucket.
+- No secrets are committed. Per-site env files are git-ignored, and backup credentials are read from the environment.
+- k3s binds only to the private network; only HTTPS is exposed publicly.
+- Each site runs its own database, identity realm and object storage.

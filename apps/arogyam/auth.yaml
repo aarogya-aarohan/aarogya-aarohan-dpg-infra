@@ -1,0 +1,45 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: arogyam-auth
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: arogyam-example-site
+            namePrefix: arogyam-example-site
+            project: arogyam-production
+            environment: example-site
+            namespace: production
+  template:
+    metadata:
+      name: '{{namePrefix}}-auth'
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: '{{project}}'
+      sources:
+        - path: 'components/arogyam/auth/environment/{{environment}}/resources'
+          repoURL: 'git@github.com:YOUR_ORG/aarogya-aarohan-dpg-infra.git'
+          targetRevision: HEAD
+        - chart: keycloak
+          repoURL: https://charts.bitnami.com/bitnami
+          targetRevision: 21.0.0
+          helm:
+            releaseName: keycloak
+            valueFiles:
+              - '$values/components/arogyam/auth/environment/{{environment}}/values/auth-values.yaml'
+        - repoURL: 'git@github.com:YOUR_ORG/aarogya-aarohan-dpg-infra.git'
+          targetRevision: main
+          ref: values
+      destination:
+        name: '{{cluster}}'
+        namespace: '{{namespace}}'
+      syncPolicy:
+        automated:
+          selfHeal: true
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - Validate=true

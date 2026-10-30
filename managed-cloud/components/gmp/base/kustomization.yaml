@@ -1,9 +1,0 @@
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-# Only ingress-nginx lives under this component (see the header comment in
-# podmonitoring-ingress-nginx.yaml for why hapi-fhir and keycloak aren't
-# here). PodMonitoring is namespaced and selects only its own namespace's
-# pods, so this namespace applies to that one resource.
-namespace: ingress-nginx
-resources:
-  - podmonitoring-ingress-nginx.yaml

@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps
+  namespace: argocd
+spec:
+  project: management
+  sources:
+    - path: apps
+      repoURL: 'git@github.com:YOUR_ORG/aarogya-aarohan-dpg-infra.git'
+      targetRevision: HEAD
+      directory:
+        recurse: true
+  destination:
+    name: in-cluster
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - Validate=true

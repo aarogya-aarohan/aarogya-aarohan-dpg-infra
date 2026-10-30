@@ -1,8 +1,0 @@
-apiVersion: external-secrets.io/v1beta1
-kind: ClusterSecretStore
-metadata:
-  name: gcp-sm
-spec:
-  provider:
-    gcpsm:
-      projectID: your-gcp-project-id
